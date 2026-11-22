@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Pilot, Aircraft, FlightLog } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface OperationsContextType {
   pilots: Pilot[];
@@ -11,8 +12,10 @@ interface OperationsContextType {
   deletePilot: (id: string) => void;
   addAircraft: (a: Omit<Aircraft, 'id'>) => void;
   updateAircraft: (id: string, updates: Partial<Aircraft>) => void;
+  deleteAircraft: (id: string) => void;
   addFlightLog: (log: Omit<FlightLog, 'id'>) => void;
   updateFlightLog: (id: string, updates: Partial<FlightLog>) => void;
+  deleteFlightLog: (id: string) => void;
 }
 
 const OperationsContext = createContext<OperationsContextType | undefined>(undefined);
@@ -28,10 +31,10 @@ const sampleAircraft: Aircraft[] = [
 ];
 
 export const OperationsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [pilots, setPilots] = useState<Pilot[]>(samplePilots);
-  const [aircraft, setAircraft] = useState<Aircraft[]>(sampleAircraft);
-  const [flightLogs, setFlightLogs] = useState<FlightLog[]>([]);
-  const [nextRegistroNumber, setNextRegistroNumber] = useState(1);
+  const [pilots, setPilots] = usePersistedState<Pilot[]>('pilots', samplePilots);
+  const [aircraft, setAircraft] = usePersistedState<Aircraft[]>('aircraft', sampleAircraft);
+  const [flightLogs, setFlightLogs] = usePersistedState<FlightLog[]>('flightLogs', []);
+  const [nextRegistroNumber, setNextRegistroNumber] = usePersistedState<number>('nextRegistroNumber', 1);
 
   const addPilot = (p: Omit<Pilot, 'id'>) =>
     setPilots(prev => [...prev, { ...p, id: Date.now().toString() }]);
@@ -47,6 +50,9 @@ export const OperationsProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const updateAircraft = (id: string, updates: Partial<Aircraft>) =>
     setAircraft(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+
+  const deleteAircraft = (id: string) =>
+    setAircraft(prev => prev.filter(a => a.id !== id));
 
   const addFlightLog = (log: Omit<FlightLog, 'id'>) => {
     const newLog: FlightLog = { ...log, id: Date.now().toString() };
@@ -84,12 +90,15 @@ export const OperationsProvider: React.FC<{ children: ReactNode }> = ({ children
   const updateFlightLog = (id: string, updates: Partial<FlightLog>) =>
     setFlightLogs(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
 
+  const deleteFlightLog = (id: string) =>
+    setFlightLogs(prev => prev.filter(l => l.id !== id));
+
   return (
     <OperationsContext.Provider value={{
       pilots, aircraft, flightLogs, nextRegistroNumber,
       addPilot, updatePilot, deletePilot,
-      addAircraft, updateAircraft,
-      addFlightLog, updateFlightLog,
+      addAircraft, updateAircraft, deleteAircraft,
+      addFlightLog, updateFlightLog, deleteFlightLog,
     }}>
       {children}
     </OperationsContext.Provider>

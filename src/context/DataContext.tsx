@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Part, PartItem, PartRequest, HistoryEntry } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface DataContextType {
   parts: Part[];
@@ -7,10 +8,13 @@ interface DataContextType {
   history: HistoryEntry[];
   addPart: (part: Omit<Part, 'id'>) => void;
   updatePart: (id: string, updates: Partial<Part>) => void;
+  deletePart: (id: string) => void;
   addPartItem: (partId: string, item: Omit<PartItem, 'id'>) => void;
   updatePartItem: (partId: string, itemId: string, updates: Partial<PartItem>) => void;
+  deletePartItem: (partId: string, itemId: string) => void;
   addRequest: (request: Omit<PartRequest, 'id'>) => void;
   updateRequest: (id: string, updates: Partial<PartRequest>) => void;
+  deleteRequest: (id: string) => void;
   addHistory: (entry: Omit<HistoryEntry, 'id'>) => void;
 }
 
@@ -150,15 +154,18 @@ const initialHistory: HistoryEntry[] = [
 ];
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [parts, setParts] = useState<Part[]>(initialParts);
-  const [requests, setRequests] = useState<PartRequest[]>(initialRequests);
-  const [history, setHistory] = useState<HistoryEntry[]>(initialHistory);
+  const [parts, setParts] = usePersistedState<Part[]>('parts', initialParts);
+  const [requests, setRequests] = usePersistedState<PartRequest[]>('requests', initialRequests);
+  const [history, setHistory] = usePersistedState<HistoryEntry[]>('history', initialHistory);
 
   const addPart = (part: Omit<Part, 'id'>) =>
     setParts(prev => [...prev, { ...part, id: Date.now().toString() }]);
 
   const updatePart = (id: string, updates: Partial<Part>) =>
     setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+
+  const deletePart = (id: string) =>
+    setParts(prev => prev.filter(p => p.id !== id));
 
   const addPartItem = (partId: string, item: Omit<PartItem, 'id'>) =>
     setParts(prev => prev.map(p => {
@@ -172,17 +179,26 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { ...p, items: p.items.map(i => i.id === itemId ? { ...i, ...updates } : i) };
     }));
 
+  const deletePartItem = (partId: string, itemId: string) =>
+    setParts(prev => prev.map(p => {
+      if (p.id !== partId) return p;
+      return { ...p, items: p.items.filter(i => i.id !== itemId) };
+    }));
+
   const addRequest = (request: Omit<PartRequest, 'id'>) =>
     setRequests(prev => [...prev, { ...request, id: Date.now().toString() }]);
 
   const updateRequest = (id: string, updates: Partial<PartRequest>) =>
     setRequests(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
 
+  const deleteRequest = (id: string) =>
+    setRequests(prev => prev.filter(r => r.id !== id));
+
   const addHistory = (entry: Omit<HistoryEntry, 'id'>) =>
     setHistory(prev => [{ ...entry, id: Date.now().toString() }, ...prev]);
 
   return (
-    <DataContext.Provider value={{ parts, requests, history, addPart, updatePart, addPartItem, updatePartItem, addRequest, updateRequest, addHistory }}>
+    <DataContext.Provider value={{ parts, requests, history, addPart, updatePart, deletePart, addPartItem, updatePartItem, deletePartItem, addRequest, updateRequest, deleteRequest, addHistory }}>
       {children}
     </DataContext.Provider>
   );

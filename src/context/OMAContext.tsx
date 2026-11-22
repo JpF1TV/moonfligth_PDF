@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { WorkOrder } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface OMAContextType {
   workOrders: WorkOrder[];
@@ -74,7 +75,7 @@ const sampleWorkOrders: WorkOrder[] = [
 ];
 
 export const OMAProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(sampleWorkOrders);
+  const [workOrders, setWorkOrders] = usePersistedState<WorkOrder[]>('workOrders', sampleWorkOrders);
 
   const addWorkOrder = (wo: Omit<WorkOrder, 'id' | 'workOrderNumber' | 'createdDate'>) => {
     setWorkOrders(prev => {

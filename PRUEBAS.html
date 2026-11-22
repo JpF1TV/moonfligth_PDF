@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Guía de Pruebas y Registro de Errores — KRONAIR</title>
+<style>
+  @page { margin: 2cm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 24px;
+    font-size: 13px;
+  }
+  h1 { font-size: 24px; border-bottom: 3px solid #0b63c4; padding-bottom: 8px; color: #0b2545; }
+  h2 { font-size: 18px; color: #0b63c4; margin-top: 28px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  h3 { font-size: 15px; color: #0b2545; margin-top: 18px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #bbb; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #0b63c4; color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: #f3f7fc; }
+  code {
+    background: #eef2f7; padding: 2px 5px; border-radius: 4px;
+    font-family: "Consolas", monospace; font-size: 12px;
+  }
+  pre {
+    background: #1e1e2e; color: #e6e6e6; padding: 12px; border-radius: 6px;
+    overflow-x: auto; font-size: 12px;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .checkbox { font-family: monospace; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+  .note { background: #fff8e1; border-left: 4px solid #f5a623; padding: 8px 12px; margin: 10px 0; }
+  .print-hint {
+    background: #e8f5e9; border: 1px solid #4caf50; border-radius: 6px;
+    padding: 12px 16px; margin-bottom: 24px; font-size: 13px;
+  }
+  @media print { .print-hint { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="print-hint">
+  <strong>Para guardar como PDF:</strong> presiona <code>Ctrl + P</code> →
+  en "Destino" elige <strong>"Guardar como PDF"</strong> → Guardar.
+  (Este recuadro no aparecerá en el PDF.)
+</div>
+
+<h1>Guía de Pruebas y Registro de Errores — KRONAIR</h1>
+<p>Documento para registrar pruebas, errores y observaciones durante la fase de testing.</p>
+
+<h2>1. Información del entorno</h2>
+<table>
+  <tr><th>Dato</th><th>Valor</th></tr>
+  <tr><td>Versión / commit</td><td></td></tr>
+  <tr><td>Entorno</td><td>Local (http://localhost:5173) / Vercel</td></tr>
+  <tr><td>Navegador</td><td></td></tr>
+  <tr><td>Fecha de la sesión de pruebas</td><td></td></tr>
+  <tr><td>Responsable</td><td></td></tr>
+</table>
+
+<h2>2. Usuarios de prueba</h2>
+<p>Las credenciales están definidas en <code>src/context/AuthContext.tsx</code>.</p>
+<table>
+  <tr><th>Usuario</th><th>Contraseña</th><th>Rol</th><th>Redirige a</th></tr>
+  <tr><td>superadmin</td><td>super123</td><td>superadmin</td><td>/superadmin</td></tr>
+  <tr><td>admin</td><td>admin123</td><td>admin</td><td>/admin-panel</td></tr>
+  <tr><td>almacen</td><td>almacen123</td><td>warehouse</td><td>/almacen</td></tr>
+  <tr><td>usuario</td><td>usuario123</td><td>requester</td><td>/mantenimiento</td></tr>
+</table>
+
+<h2>3. Persistencia de datos (localStorage)</h2>
+<p>Los datos se guardan en el navegador con prefijo <code>kronair:</code>. Persisten al recargar, pero son por navegador/dispositivo.</p>
+<table>
+  <tr><th>Dato</th><th>Clave</th></tr>
+  <tr><td>Usuarios</td><td>kronair:users</td></tr>
+  <tr><td>Sesiones</td><td>kronair:sessions</td></tr>
+  <tr><td>Inventario</td><td>kronair:parts</td></tr>
+  <tr><td>Solicitudes</td><td>kronair:requests</td></tr>
+  <tr><td>Historial</td><td>kronair:history</td></tr>
+  <tr><td>Tickets</td><td>kronair:tickets</td></tr>
+  <tr><td>Pilotos</td><td>kronair:pilots</td></tr>
+  <tr><td>Aeronaves</td><td>kronair:aircraft</td></tr>
+  <tr><td>Bitácoras de vuelo</td><td>kronair:flightLogs</td></tr>
+  <tr><td>Componentes</td><td>kronair:components</td></tr>
+  <tr><td>Órdenes de trabajo</td><td>kronair:workOrders</td></tr>
+</table>
+<p><strong>Reiniciar datos de prueba:</strong> F12 → Application → Local Storage → borrar claves <code>kronair:*</code>. O en la consola del navegador:</p>
+<pre><code>Object.keys(localStorage).filter(k =&gt; k.startsWith('kronair:')).forEach(k =&gt; localStorage.removeItem(k))</code></pre>
+
+<h2>4. Checklist de pruebas por módulo</h2>
+<p>Marca cada caso: &#9989; OK · &#10060; Falla · &#9888; Con observaciones · &#11036; Sin probar</p>
+
+<h3>4.1 Autenticación</h3>
+<ul class="checkbox">
+  <li>&#9744; Login con cada usuario de prueba redirige al módulo correcto</li>
+  <li>&#9744; Login con credenciales incorrectas muestra error</li>
+  <li>&#9744; Logout cierra sesión y vuelve al login</li>
+  <li>&#9744; Al recargar (F5) pide login de nuevo pero los datos siguen guardados</li>
+  <li>&#9744; Rutas protegidas redirigen a /login sin sesión</li>
+  <li>&#9744; Un rol sin permiso no accede a rutas de admin/superadmin</li>
+</ul>
+
+<h3>4.2 Almacén (inventario)</h3>
+<ul class="checkbox">
+  <li>&#9744; Listado de partes carga correctamente</li>
+  <li>&#9744; Agregar nueva parte</li>
+  <li>&#9744; Agregar ítem (serial) a una parte</li>
+  <li>&#9744; Editar parte / ítem</li>
+  <li>&#9744; Estados (disponible, overhaul, reservado, salida) se muestran bien</li>
+  <li>&#9744; Los cambios persisten tras recargar</li>
+</ul>
+
+<h3>4.3 Solicitudes / Historial</h3>
+<ul class="checkbox">
+  <li>&#9744; Crear solicitud de parte</li>
+  <li>&#9744; Aprobar / rechazar solicitud</li>
+  <li>&#9744; El historial registra la acción</li>
+  <li>&#9744; Persistencia tras recargar</li>
+</ul>
+
+<h3>4.4 Mantenimiento / Tickets</h3>
+<ul class="checkbox">
+  <li>&#9744; Crear ticket (número autogenerado correcto)</li>
+  <li>&#9744; Editar ticket</li>
+  <li>&#9744; Eliminar ticket</li>
+  <li>&#9744; Persistencia tras recargar</li>
+</ul>
+
+<h3>4.5 Operaciones</h3>
+<ul class="checkbox">
+  <li>&#9744; Listado de pilotos y aeronaves</li>
+  <li>&#9744; Agregar/editar/eliminar piloto</li>
+  <li>&#9744; Agregar/editar aeronave</li>
+  <li>&#9744; Registrar bitácora de vuelo</li>
+  <li>&#9744; Horas y ciclos de piloto y aeronave se actualizan al registrar vuelo</li>
+  <li>&#9744; Persistencia tras recargar</li>
+</ul>
+
+<h3>4.6 Ingeniería (componentes)</h3>
+<ul class="checkbox">
+  <li>&#9744; Listado de componentes con estados (ok / alerta / vencido)</li>
+  <li>&#9744; Agregar componente calcula estado correctamente</li>
+  <li>&#9744; Editar / eliminar componente</li>
+  <li>&#9744; Recalcular estado según horas/ciclos actuales</li>
+  <li>&#9744; Persistencia tras recargar</li>
+</ul>
+
+<h3>4.7 OMA (órdenes de trabajo)</h3>
+<ul class="checkbox">
+  <li>&#9744; Listado de órdenes de trabajo</li>
+  <li>&#9744; Crear orden (número OT autogenerado)</li>
+  <li>&#9744; Generar orden desde un componente</li>
+  <li>&#9744; Editar / eliminar orden</li>
+  <li>&#9744; <strong>Descargar PDF MCM-002 y verificar que el logo aparezca</strong></li>
+  <li>&#9744; Datos del PDF correctos (aeronave, componente, fechas, firmas)</li>
+  <li>&#9744; Persistencia tras recargar</li>
+</ul>
+
+<h2>5. Registro de errores</h2>
+<p>Copia este bloque por cada error encontrado.</p>
+
+<h3>Error #___</h3>
+<table>
+  <tr><th>Campo</th><th>Detalle</th></tr>
+  <tr><td>Título</td><td></td></tr>
+  <tr><td>Módulo</td><td></td></tr>
+  <tr><td>Severidad</td><td>Crítico / Alto / Medio / Bajo</td></tr>
+  <tr><td>Estado</td><td>Abierto / En progreso / Resuelto / No se reproduce</td></tr>
+  <tr><td>Fecha</td><td></td></tr>
+  <tr><td>Reportado por</td><td></td></tr>
+  <tr><td>Entorno</td><td>Local / Vercel · Navegador</td></tr>
+</table>
+<p><strong>Pasos para reproducir:</strong></p>
+<ol><li></li><li></li><li></li></ol>
+<p><strong>Resultado esperado:</strong></p>
+<p><strong>Resultado actual:</strong></p>
+<p><strong>Evidencia:</strong> (captura, mensaje de consola F12, etc.)</p>
+<p><strong>Notas / solución aplicada:</strong></p>
+
+<h2>6. Severidades (referencia)</h2>
+<table>
+  <tr><th>Nivel</th><th>Criterio</th></tr>
+  <tr><td>Crítico</td><td>Bloquea el uso, pérdida de datos, la app no carga</td></tr>
+  <tr><td>Alto</td><td>Función importante no sirve, sin workaround</td></tr>
+  <tr><td>Medio</td><td>Falla con workaround, o afecta algo secundario</td></tr>
+  <tr><td>Bajo</td><td>Cosmético, textos, detalles de UI</td></tr>
+</table>
+
+<h2>7. Observaciones generales</h2>
+<p>(Ideas de mejora, dudas, comportamientos raros que no son errores claros.)</p>
+<ul><li>&nbsp;</li><li>&nbsp;</li><li>&nbsp;</li></ul>
+
+</body>
+</html>

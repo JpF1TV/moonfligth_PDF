@@ -6,6 +6,10 @@ import { TicketProvider } from './context/TicketContext';
 import { OperationsProvider } from './context/OperationsContext';
 import { EngineeringProvider } from './context/EngineeringContext';
 import { OMAProvider } from './context/OMAContext';
+import { ToastProvider } from './context/ToastContext';
+import { AuditProvider } from './context/AuditContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Almacen from './pages/Almacen';
@@ -16,6 +20,7 @@ import SuperAdmin from './pages/SuperAdmin';
 import Operaciones from './pages/Operaciones';
 import Ingenieria from './pages/Ingenieria';
 import OMA from './pages/OMA';
+import Dashboard from './pages/Dashboard';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -36,21 +41,22 @@ const LoginRoute: React.FC = () => {
   const { user } = useAuth();
   if (!user) return <Login />;
   if (user.role === 'superadmin') return <Navigate to="/superadmin" />;
-  if (user.role === 'admin') return <Navigate to="/admin-panel" />;
-  if (user.role === 'warehouse') return <Navigate to="/almacen" />;
-  return <Navigate to="/mantenimiento" />;
+  return <Navigate to="/" />;
 };
 
 const RoleBasedRedirect: React.FC = () => {
   const { user } = useAuth();
+  // superadmin mantiene su panel dedicado; el resto ve el dashboard general
   if (user?.role === 'superadmin') return <Navigate to="/superadmin" />;
-  if (user?.role === 'admin') return <Navigate to="/admin-panel" />;
-  if (user?.role === 'warehouse') return <Navigate to="/almacen" />;
-  return <Navigate to="/mantenimiento" />;
+  return <Dashboard />;
 };
 
 const App: React.FC = () => {
   return (
+    <ThemeProvider>
+    <ToastProvider>
+    <ConfirmProvider>
+    <AuditProvider>
     <AuthProvider>
       <TicketProvider>
         <DataProvider>
@@ -79,6 +85,10 @@ const App: React.FC = () => {
         </DataProvider>
       </TicketProvider>
     </AuthProvider>
+    </AuditProvider>
+    </ConfirmProvider>
+    </ToastProvider>
+    </ThemeProvider>
   );
 };
 

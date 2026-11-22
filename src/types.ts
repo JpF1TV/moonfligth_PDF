@@ -8,6 +8,7 @@
   createdDate?: string;
   lastLogin?: string;
   isActive?: boolean;
+  avatarUrl?: string;
 }
 
 export interface LoginSession {
@@ -55,6 +56,7 @@ export interface PartRequest {
   status: 'pending' | 'approved' | 'rejected' | 'completed';
   approvedBy?: string;
   approvalDate?: string;
+  approvalNotes?: string;
   notes?: string;
   requestType: 'exit' | 'overhaul';
   pdfUrl?: string;

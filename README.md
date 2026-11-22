@@ -1,6 +1,6 @@
-# Moonflight - Sistema de Control de Almacén
+# KRONAIR - Sistema Integral de Gestión Aeronáutica
 
-Sistema web para el control de inventario de almacenes de Moonflight.
+Sistema web para el control de inventario, mantenimiento, operaciones e ingeniería de flotas aeronáuticas.
 
 ## Características
 

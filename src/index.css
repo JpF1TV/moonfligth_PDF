@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
   --primary:       #2563eb;
@@ -29,6 +29,81 @@
   --shadow:        0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.06);
   --shadow-lg:     0 10px 15px -3px rgba(0,0,0,.08), 0 4px 6px -2px rgba(0,0,0,.05);
   --shadow-xl:     0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);
+
+  /* ── Tokens semánticos (cambian con el tema) ── */
+  --bg-app:        #f1f5f9;   /* fondo general */
+  --bg-surface:    #ffffff;   /* tarjetas, paneles, modales */
+  --bg-subtle:     #f8fafc;   /* zonas secundarias, formularios */
+  --bg-muted:      #f1f5f9;   /* chips, hover suave */
+  --bg-input:      #ffffff;
+  --bg-table-head: #1e293b;
+  --text-strong:   #0f172a;   /* títulos */
+  --text-main:     #1e293b;   /* texto base */
+  --text-soft:     #475569;   /* texto secundario */
+  --text-faint:    #94a3b8;   /* ayudas, placeholders */
+  --border:        #e2e8f0;
+  --border-strong: #cbd5e1;
+  --topbar-bg:     rgba(255, 255, 255, 0.85);
+  --overlay:       rgba(15, 23, 42, 0.5);
+
+  /* Estados (fondo suave + texto) */
+  --st-success-bg: #dcfce7;  --st-success-fg: #166534;
+  --st-warning-bg: #fef3c7;  --st-warning-fg: #92400e;
+  --st-danger-bg:  #fee2e2;  --st-danger-fg:  #991b1b;
+  --st-info-bg:    #dbeafe;  --st-info-fg:    #1e40af;
+  --st-violet-bg:  #ede9fe;  --st-violet-fg:  #5b21b6;
+  --st-neutral-bg: #f1f5f9;  --st-neutral-fg: #475569;
+}
+
+/* ══════════════ Tema oscuro ══════════════ */
+[data-theme="dark"] {
+  --primary:       #3b82f6;
+  --primary-dark:  #2563eb;
+  --primary-light: rgba(59, 130, 246, 0.14);
+  --success-light: rgba(34, 197, 94, 0.16);
+  --warning-light: rgba(245, 158, 11, 0.16);
+  --danger-light:  rgba(239, 68, 68, 0.16);
+
+  /* Invertimos la escala de grises para que todo el CSS existente se adapte */
+  --gray-50:       #1a2540;
+  --gray-100:      #1e2a47;
+  --gray-200:      #2a3857;
+  --gray-300:      #3a4a6b;
+  --gray-400:      #7d8aa6;
+  --gray-500:      #98a3bd;
+  --gray-600:      #b4bdd2;
+  --gray-700:      #cbd2e1;
+  --gray-800:      #e2e7f1;
+  --gray-900:      #f1f4fa;
+
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.4);
+  --shadow:        0 4px 8px rgba(0,0,0,.4);
+  --shadow-lg:     0 10px 20px rgba(0,0,0,.45);
+  --shadow-xl:     0 20px 30px rgba(0,0,0,.5);
+
+  --bg-app:        #0b1220;
+  --bg-surface:    #131c31;
+  --bg-subtle:     #182340;
+  --bg-muted:      #1e2a47;
+  --bg-input:      #0f1830;
+  --bg-table-head: #0e1730;
+  --text-strong:   #f1f4fa;
+  --text-main:     #e2e7f1;
+  --text-soft:     #b4bdd2;
+  --text-faint:    #7d8aa6;
+  --border:        #2a3857;
+  --border-strong: #3a4a6b;
+  --topbar-bg:     rgba(19, 28, 49, 0.85);
+  --overlay:       rgba(0, 0, 0, 0.65);
+
+  --st-success-bg: rgba(34, 197, 94, 0.18);  --st-success-fg: #86efac;
+  --st-warning-bg: rgba(245, 158, 11, 0.18); --st-warning-fg: #fcd34d;
+  --st-danger-bg:  rgba(239, 68, 68, 0.18);  --st-danger-fg:  #fca5a5;
+  --st-info-bg:    rgba(59, 130, 246, 0.2);  --st-info-fg:    #93c5fd;
+  --st-violet-bg:  rgba(139, 92, 246, 0.2);  --st-violet-fg:  #c4b5fd;
+  --st-neutral-bg: #1e2a47;                  --st-neutral-fg: #b4bdd2;
+
+  color-scheme: dark;
 }
 
 * {
@@ -40,10 +115,11 @@
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: var(--gray-100);
-  color: var(--gray-800);
+  background: var(--bg-app);
+  color: var(--text-main);
   font-size: 14px;
   line-height: 1.5;
+  transition: background 0.2s, color 0.2s;
 }
 
 #root {
@@ -52,6 +128,6 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--gray-100); }
-::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
+::-webkit-scrollbar-track { background: var(--bg-muted); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }

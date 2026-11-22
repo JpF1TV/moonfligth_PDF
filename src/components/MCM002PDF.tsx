@@ -4,14 +4,36 @@ import {
   Page,
   View,
   Text,
-  Image,
+  Svg,
+  Path,
+  Rect,
+  Defs,
+  LinearGradient,
+  Stop,
+  G,
   StyleSheet,
   pdf,
 } from '@react-pdf/renderer';
 import { WorkOrder } from '../types';
 
-// Importar logo como asset — Vite lo resuelve a una URL válida en runtime
-import logoMoon from '../assets/logo-moon.png';
+/** Logo KRONAIR dibujado con vectores nativos del PDF (no depende de archivos de imagen). */
+const KronairLogoPDF: React.FC<{ size?: number }> = ({ size = 42 }) => (
+  <Svg width={size} height={size} viewBox="0 0 64 64">
+    <Defs>
+      <LinearGradient id="kronairBg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+        <Stop offset="0" stopColor="#2563eb" />
+        <Stop offset="1" stopColor="#06b6d4" />
+      </LinearGradient>
+    </Defs>
+    <Rect width="64" height="64" rx="16" fill="url(#kronairBg)" />
+    <G transform="translate(33 31) rotate(45) scale(1.6) translate(-12 -12)">
+      <Path
+        d="M21 16v-2l-8-5V4a1.5 1.5 0 0 0-3 0v5l-8 5v2l8-2.5V18l-2 1.5V21l3.5-1 3.5 1v-1.5L13 18v-3.5L21 16Z"
+        fill="#ffffff"
+      />
+    </G>
+  </Svg>
+);
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    Estilos MCM-002 – Orden de Trabajo (compactos para 1 sola página)
@@ -284,7 +306,7 @@ const MCM002Document: React.FC<MCM002Props> = ({ workOrder: w }) => (
       {/* ═══════════════════ ENCABEZADO ═══════════════════ */}
       <View style={s.headerRow}>
         <View style={s.logoCell}>
-          <Image style={s.logoImage} src={logoMoon} />
+          <KronairLogoPDF size={42} />
         </View>
         <View style={s.titleCell}>
           <Text style={s.titleText}>ORDEN DE TRABAJO</Text>

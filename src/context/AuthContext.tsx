@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { User, LoginSession } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface AuthContextType {
   user: User | null;
@@ -21,7 +22,7 @@ const initialUsers: User[] = [
     password: 'super123', 
     role: 'superadmin',
     fullName: 'Usuario Madre',
-    email: 'superadmin@siga.com',
+    email: 'superadmin@kronair.com',
     createdDate: '2024-01-01',
     isActive: true
   },
@@ -31,7 +32,7 @@ const initialUsers: User[] = [
     password: 'admin123', 
     role: 'admin',
     fullName: 'Administrador',
-    email: 'admin@siga.com',
+    email: 'admin@kronair.com',
     createdDate: '2024-01-01',
     isActive: true
   },
@@ -41,7 +42,7 @@ const initialUsers: User[] = [
     password: 'almacen123', 
     role: 'warehouse',
     fullName: 'Personal de Almacén',
-    email: 'almacen@siga.com',
+    email: 'almacen@kronair.com',
     createdDate: '2024-01-01',
     isActive: true
   },
@@ -51,7 +52,7 @@ const initialUsers: User[] = [
     password: 'usuario123', 
     role: 'requester',
     fullName: 'Usuario Solicitante',
-    email: 'usuario@siga.com',
+    email: 'usuario@kronair.com',
     createdDate: '2024-01-01',
     isActive: true
   },
@@ -59,8 +60,8 @@ const initialUsers: User[] = [
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>(initialUsers);
-  const [sessions, setSessions] = useState<LoginSession[]>([]);
+  const [users, setUsers] = usePersistedState<User[]>('users', initialUsers);
+  const [sessions, setSessions] = usePersistedState<LoginSession[]>('sessions', []);
 
   const login = (username: string, password: string): boolean => {
     const found = users.find(u => u.username === username && u.password === password && u.isActive);

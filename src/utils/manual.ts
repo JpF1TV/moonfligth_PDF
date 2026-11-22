@@ -38,13 +38,13 @@ export function downloadManual() {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Manual de Usuario — SIGA</title>
+  <title>Manual de Usuario — KRONAIR</title>
   <style>${style}</style>
 </head>
 <body>
 
 <div class="cover">
-  <h1>✈️ SIGA</h1>
+  <h1>✈️ KRONAIR</h1>
   <p>Sistema Integrado de Gestión Aeronáutica</p>
   <p>Manual de Usuario — Guía de Capacitación</p>
   <div class="version">Versión 1.0 · ${new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long' })}</div>
@@ -53,7 +53,7 @@ export function downloadManual() {
 <div class="content">
 
   <h2>1. Introducción</h2>
-  <p>SIGA es una plataforma web diseñada para gestionar de forma integral las operaciones aeronáuticas de la empresa. Centraliza el control de almacén, operaciones de vuelo, ingeniería de mantenimiento y órdenes de trabajo en un solo sistema accesible desde cualquier navegador.</p>
+  <p>KRONAIR es una plataforma web diseñada para gestionar de forma integral las operaciones aeronáuticas de la empresa. Centraliza el control de almacén, operaciones de vuelo, ingeniería de mantenimiento y órdenes de trabajo en un solo sistema accesible desde cualquier navegador.</p>
 
   <h2>2. Acceso al Sistema</h2>
   <h3>2.1 Inicio de Sesión</h3>
@@ -190,7 +190,7 @@ export function downloadManual() {
 </div>
 
 <div class="footer">
-  SIGA — Sistema Integrado de Gestión Aeronáutica &nbsp;|&nbsp; Manual de Usuario v1.0 &nbsp;|&nbsp; Diseñado por Juan &amp; Carlos
+  KRONAIR — Sistema Integrado de Gestión Aeronáutica &nbsp;|&nbsp; Manual de Usuario v1.0 &nbsp;|&nbsp; Diseñado por Juan &amp; Carlos
 </div>
 
 <script>window.onload = function(){ window.print(); }</script>
@@ -200,7 +200,7 @@ export function downloadManual() {
   const blob = new Blob([html], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `Manual_SIGA_v1.0.html`;
+  a.download = `Manual_KRONAIR_v1.0.html`;
   a.click();
 
   const win = window.open('', '_blank');

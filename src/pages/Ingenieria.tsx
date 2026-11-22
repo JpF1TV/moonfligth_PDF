@@ -4,23 +4,41 @@ import { useOperations } from '../context/OperationsContext';
 import { useOMA } from '../context/OMAContext';
 import { useAuth } from '../context/AuthContext';
 import { AircraftComponent } from '../types';
+import { canEdit, canDelete } from '../utils/permissions';
+import { useToast } from '../context/ToastContext';
+import { useAudit } from '../context/AuditContext';
+import { useConfirm } from '../context/ConfirmContext';
+import ModuleIcon from '../components/ModuleIcon';
+import Icon from '../components/Icon';
+import Drawer from '../components/Drawer';
+import EmptyState from '../components/EmptyState';
+import { Pager, usePagination } from '../components/Pager';
 import './Pages.css';
+
+const emptyForm = {
+  aircraftId: '', description: '', partNumber: '', serialNumber: '',
+  installDate: '', installHours: '', installCycles: '',
+  limitHours: '', limitCycles: '', limitDate: '',
+  alertHours: '', alertCycles: '', alertDays: '', notes: '',
+};
 
 const Ingenieria: React.FC = () => {
   const { user } = useAuth();
-  const { components, addComponent, deleteComponent } = useEngineering();
+  const toast = useToast();
+  const { logAudit } = useAudit();
+  const confirm = useConfirm();
+  const { components, addComponent, updateComponent, deleteComponent } = useEngineering();
   const { aircraft } = useOperations();
   const { generateFromComponent } = useOMA();
+
+  const puedeEditar = canEdit(user, 'ingenieria');
+  const puedeEliminar = canDelete(user, 'ingenieria');
 
   const [filterAircraft, setFilterAircraft] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    aircraftId: '', description: '', partNumber: '', serialNumber: '',
-    installDate: '', installHours: '', installCycles: '',
-    limitHours: '', limitCycles: '', limitDate: '',
-    alertHours: '', alertCycles: '', alertDays: '', notes: '',
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ ...emptyForm });
 
   const submitComponent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +61,54 @@ const Ingenieria: React.FC = () => {
       alertDays: form.alertDays ? parseInt(form.alertDays) : undefined,
       notes: form.notes,
     };
-    addComponent(base);
-    setForm({ aircraftId: '', description: '', partNumber: '', serialNumber: '', installDate: '', installHours: '', installCycles: '', limitHours: '', limitCycles: '', limitDate: '', alertHours: '', alertCycles: '', alertDays: '', notes: '' });
+    if (editingId) {
+      updateComponent(editingId, base);
+      logAudit({ module: 'ingenieria', action: 'update', user: user?.username || '', description: `Editó el componente "${base.description}" (${ac.registration})`, reference: base.partNumber });
+    } else {
+      addComponent(base);
+      logAudit({ module: 'ingenieria', action: 'create', user: user?.username || '', description: `Agregó el componente "${base.description}" (${ac.registration})`, reference: base.partNumber });
+    }
+    setForm({ ...emptyForm });
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const startEdit = (c: AircraftComponent) => {
+    setEditingId(c.id);
+    setForm({
+      aircraftId: c.aircraftId,
+      description: c.description,
+      partNumber: c.partNumber,
+      serialNumber: c.serialNumber,
+      installDate: c.installDate,
+      installHours: String(c.installHours),
+      installCycles: String(c.installCycles),
+      limitHours: c.limitHours != null ? String(c.limitHours) : '',
+      limitCycles: c.limitCycles != null ? String(c.limitCycles) : '',
+      limitDate: c.limitDate || '',
+      alertHours: c.alertHours != null ? String(c.alertHours) : '',
+      alertCycles: c.alertCycles != null ? String(c.alertCycles) : '',
+      alertDays: c.alertDays != null ? String(c.alertDays) : '',
+      notes: c.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (c: AircraftComponent) => {
+    const ok = await confirm({
+      danger: true,
+      title: 'Eliminar componente',
+      message: `Se eliminará "${c.description}" (${c.partNumber}). Esta acción no se puede deshacer.`,
+    });
+    if (ok) {
+      deleteComponent(c.id);
+      logAudit({ module: 'ingenieria', action: 'delete', user: user?.username || '', description: `Eliminó el componente "${c.description}" (${c.partNumber})`, reference: c.partNumber });
+    }
+  };
+
+  const cancelForm = () => {
+    setForm({ ...emptyForm });
+    setEditingId(null);
     setShowForm(false);
   };
 
@@ -60,7 +124,8 @@ const Ingenieria: React.FC = () => {
       projectedDate: projected.toISOString().split('T')[0],
       createdBy: user?.username || 'sistema',
     });
-    alert(`✅ Orden de Trabajo generada automáticamente para: ${c.description}`);
+    logAudit({ module: 'oma', action: 'create', user: user?.username || '', description: `Generó OT automática desde componente "${c.description}" (${c.aircraftRegistration})`, reference: c.partNumber });
+    toast.success(`Orden de Trabajo generada para: ${c.description}`);
   };
 
   const filtered = components.filter(c =>
@@ -69,32 +134,35 @@ const Ingenieria: React.FC = () => {
   );
 
   const alerts = components.filter(c => c.status === 'alert' || c.status === 'overdue');
+  const pg = usePagination(filtered, 10);
 
   const statusLabel = (s: AircraftComponent['status']) => {
-    if (s === 'ok') return <span className="status status-approved">✅ OK</span>;
-    if (s === 'alert') return <span className="status status-pending">⚠️ Alerta</span>;
-    return <span className="status status-rejected">🔴 Vencido</span>;
+    if (s === 'ok') return <span className="status status-approved">OK</span>;
+    if (s === 'alert') return <span className="status status-pending">Alerta</span>;
+    return <span className="status status-rejected">Vencido</span>;
   };
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h2>🔧 Ingeniería</h2>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancelar' : '+ Agregar Componente'}
-        </button>
+        <h2 className="page-title"><ModuleIcon name="ingenieria" size={22} /> Ingeniería</h2>
+        {puedeEditar && (
+          <button className="btn-primary" onClick={() => { setForm({ ...emptyForm }); setEditingId(null); setShowForm(true); }}>
+            <Icon name="plus" size={15} /> Agregar Componente
+          </button>
+        )}
       </div>
 
       {/* Alertas activas */}
       {alerts.length > 0 && (
-        <div style={{ background: '#fff3cd', border: '1px solid #f39c12', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-          <strong>⚠️ {alerts.length} componente(s) requieren atención:</strong>
-          <ul style={{ margin: '8px 0 0 20px' }}>
+        <div className="warn-box">
+          <strong>{alerts.length} componente(s) requieren atención:</strong>
+          <ul>
             {alerts.map(c => (
-              <li key={c.id} style={{ color: c.status === 'overdue' ? '#721c24' : '#856404' }}>
+              <li key={c.id} className={c.status === 'overdue' ? 'is-overdue' : ''}>
                 {c.aircraftRegistration} — {c.description} ({c.partNumber}) — {c.status === 'overdue' ? 'VENCIDO' : 'EN ALERTA'}
                 {' '}
-                <button className="btn-small" style={{ background: '#e67e22', marginLeft: 8 }} onClick={() => handleGenerateOT(c)}>
+                <button className="btn-soft btn-soft-warn" style={{ marginLeft: 8 }} onClick={() => handleGenerateOT(c)}>
                   Generar OT
                 </button>
               </li>
@@ -103,9 +171,14 @@ const Ingenieria: React.FC = () => {
         </div>
       )}
 
-      {showForm && (
+      {puedeEditar && (
+        <Drawer
+          open={showForm}
+          wide
+          title={editingId ? 'Editar Componente' : 'Nuevo Componente'}
+          onClose={cancelForm}
+        >
         <form className="form-card" onSubmit={submitComponent}>
-          <h3>Nuevo Componente</h3>
           <div className="form-grid">
             <select value={form.aircraftId} onChange={e => setForm(p => ({ ...p, aircraftId: e.target.value }))} required>
               <option value="">Seleccionar aeronave</option>
@@ -118,7 +191,7 @@ const Ingenieria: React.FC = () => {
             <input type="number" placeholder="Horas avión al instalar" value={form.installHours} onChange={e => setForm(p => ({ ...p, installHours: e.target.value }))} required />
             <input type="number" placeholder="Ciclos avión al instalar" value={form.installCycles} onChange={e => setForm(p => ({ ...p, installCycles: e.target.value }))} required />
           </div>
-          <p style={{ color: '#7f8c8d', fontSize: 13, margin: '10px 0 5px' }}>Límites de vida (dejar vacío si no aplica):</p>
+          <p style={{ color: 'var(--text-faint)', fontSize: 13, margin: '10px 0 5px' }}>Límites de vida (dejar vacío si no aplica):</p>
           <div className="form-grid">
             <input type="number" placeholder="Límite horas" value={form.limitHours} onChange={e => setForm(p => ({ ...p, limitHours: e.target.value }))} />
             <input type="number" placeholder="Límite ciclos" value={form.limitCycles} onChange={e => setForm(p => ({ ...p, limitCycles: e.target.value }))} />
@@ -127,11 +200,15 @@ const Ingenieria: React.FC = () => {
             <input type="number" placeholder="Alerta ciclos remanentes" value={form.alertCycles} onChange={e => setForm(p => ({ ...p, alertCycles: e.target.value }))} />
             <input type="number" placeholder="Alerta días remanentes" value={form.alertDays} onChange={e => setForm(p => ({ ...p, alertDays: e.target.value }))} />
           </div>
-          <input placeholder="Notas" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 5, marginTop: 10 }} />
+          <div className="form-grid">
+            <input placeholder="Notas" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} style={{ gridColumn: '1 / -1' }} />
+          </div>
           <div className="form-actions" style={{ marginTop: 15 }}>
-            <button type="submit" className="btn-primary">Guardar Componente</button>
+            <button type="button" className="btn-secondary" onClick={cancelForm}>Cancelar</button>
+            <button type="submit" className="btn-primary">{editingId ? 'Guardar Cambios' : 'Guardar Componente'}</button>
           </div>
         </form>
+        </Drawer>
       )}
 
       {/* Filtros */}
@@ -149,8 +226,13 @@ const Ingenieria: React.FC = () => {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty-state">No hay componentes registrados.</div>
+        <EmptyState
+          title="No hay componentes para mostrar"
+          hint={components.length === 0 ? 'Registra el primer componente con vida límite de una aeronave.' : 'Prueba con otros filtros.'}
+          action={puedeEditar && components.length === 0 ? { label: 'Agregar el primer componente', onClick: () => { setForm({ ...emptyForm }); setEditingId(null); setShowForm(true); } } : undefined}
+        />
       ) : (
+        <>
         <div className="table-container">
           <table>
             <thead>
@@ -161,25 +243,32 @@ const Ingenieria: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
-                <tr key={c.id} style={{ background: c.status === 'overdue' ? '#fff5f5' : c.status === 'alert' ? '#fffbf0' : undefined }}>
-                  <td><strong>{c.aircraftRegistration}</strong></td>
-                  <td>{c.description}</td>
-                  <td>{c.partNumber}</td>
-                  <td>{c.serialNumber}</td>
-                  <td>{c.installDate}</td>
-                  <td>{c.limitHours ? `${c.limitHours} h` : '—'}</td>
-                  <td>{c.limitCycles ? `${c.limitCycles} ciclos` : '—'}</td>
-                  <td>{c.limitDate || '—'}</td>
-                  <td>{statusLabel(c.status)}</td>
-                  <td>
-                    <div className="action-buttons">
+              {pg.pageItems.map(c => (
+                <tr key={c.id} className={c.status === 'overdue' ? 'row-danger' : c.status === 'alert' ? 'row-warn' : ''}>
+                  <td data-label="Aeronave"><strong>{c.aircraftRegistration}</strong></td>
+                  <td data-label="Componente">{c.description}</td>
+                  <td data-label="P/N">{c.partNumber}</td>
+                  <td data-label="S/N">{c.serialNumber}</td>
+                  <td data-label="Instalado">{c.installDate}</td>
+                  <td data-label="Límite horas">{c.limitHours ? `${c.limitHours} h` : '—'}</td>
+                  <td data-label="Límite ciclos">{c.limitCycles ? `${c.limitCycles} ciclos` : '—'}</td>
+                  <td data-label="Fecha límite">{c.limitDate || '—'}</td>
+                  <td data-label="Estado">{statusLabel(c.status)}</td>
+                  <td data-label="Acciones">
+                    <div className="actions-cell">
                       {(c.status === 'alert' || c.status === 'overdue') && (
-                        <button className="btn-small" style={{ background: '#e67e22' }} onClick={() => handleGenerateOT(c)}>
-                          Generar OT
+                        <button className="btn-soft btn-soft-warn" onClick={() => handleGenerateOT(c)}>Generar OT</button>
+                      )}
+                      {puedeEditar && (
+                        <button className="btn-icon sm edit" onClick={() => startEdit(c)} title="Editar" aria-label="Editar">
+                          <Icon name="edit" size={15} />
                         </button>
                       )}
-                      <button className="btn-small" onClick={() => deleteComponent(c.id)}>Eliminar</button>
+                      {puedeEliminar && (
+                        <button className="btn-icon sm delete" onClick={() => handleDelete(c)} title="Eliminar" aria-label="Eliminar">
+                          <Icon name="trash" size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -187,6 +276,8 @@ const Ingenieria: React.FC = () => {
             </tbody>
           </table>
         </div>
+        <Pager page={pg.page} totalPages={pg.totalPages} total={pg.total} pageSize={pg.pageSize} onChange={pg.setPage} />
+        </>
       )}
     </div>
   );

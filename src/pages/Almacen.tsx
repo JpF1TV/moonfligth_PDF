@@ -1,11 +1,26 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { canEdit, canDelete } from '../utils/permissions';
+import { useToast } from '../context/ToastContext';
+import { useAudit } from '../context/AuditContext';
+import { useConfirm } from '../context/ConfirmContext';
+import ModuleIcon from '../components/ModuleIcon';
+import Icon from '../components/Icon';
+import Drawer from '../components/Drawer';
+import EmptyState from '../components/EmptyState';
+import { Pager, usePagination } from '../components/Pager';
 import './Pages.css';
 
 const Almacen: React.FC = () => {
-  const { parts, addPart, addPartItem, updatePartItem, addHistory, addRequest } = useData();
+  const { parts, addPart, updatePart, deletePart, addPartItem, updatePartItem, deletePartItem, addHistory, addRequest } = useData();
   const { user } = useAuth();
+  const toast = useToast();
+  const { logAudit } = useAudit();
+  const confirm = useConfirm();
+
+  const puedeEditar = canEdit(user, 'almacen');
+  const puedeEliminar = canDelete(user, 'almacen');
   const [activeTab, setActiveTab] = useState<'inventory' | 'overhaul'>('inventory');
   const [showForm, setShowForm] = useState(false);
   const [expandedPart, setExpandedPart] = useState<string | null>(null);
@@ -13,6 +28,15 @@ const Almacen: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showOverhaulForm, setShowOverhaulForm] = useState<{ partId: string; itemId: string } | null>(null);
   const [showExitForm, setShowExitForm] = useState<{ partId: string; itemId: string } | null>(null);
+
+  // Edición de pieza (descripción)
+  const [editPart, setEditPart] = useState<{ id: string; description: string } | null>(null);
+
+  // Edición de ítem/unidad
+  const [editItem, setEditItem] = useState<{
+    partId: string; itemId: string;
+    partNumber: string; serialNumber: string; location: string; notes: string;
+  } | null>(null);
   
   const [formData, setFormData] = useState({
     description: '',
@@ -74,6 +98,7 @@ const Almacen: React.FC = () => {
       user: user?.username || '',
       date: new Date().toISOString()
     });
+    logAudit({ module: 'almacen', action: 'create', user: user?.username || '', description: `Registró la pieza "${formData.description}"` });
     
     setFormData({ description: '', type: 'unit', serialNumber: '', partNumber: '', location: '', quantity: 1 });
     setShowForm(false);
@@ -174,7 +199,8 @@ const Almacen: React.FC = () => {
       
       setOverhaulFormData({ expectedReturn: '', repairShop: '', reason: '', aircraftRemoved: '' });
       setShowOverhaulForm(null);
-      alert('Solicitud de overhaul enviada. Espera aprobación del administrador.');
+      logAudit({ module: 'solicitudes', action: 'create', user: user?.username || '', description: `Solicitó overhaul de ${item.partNumber} (S/N ${item.serialNumber})`, reference: item.serialNumber });
+      toast.success('Solicitud de overhaul enviada. Espera aprobación del administrador.');
     }
   };
 
@@ -197,7 +223,8 @@ const Almacen: React.FC = () => {
       
       setExitFormData({ quantity: 1, reason: '' });
       setShowExitForm(null);
-      alert('Solicitud de salida enviada. Espera aprobación del administrador.');
+      logAudit({ module: 'solicitudes', action: 'create', user: user?.username || '', description: `Solicitó salida de ${item.partNumber} (S/N ${item.serialNumber})`, reference: item.serialNumber });
+      toast.success('Solicitud de salida enviada. Espera aprobación del administrador.');
     }
   };
 
@@ -238,6 +265,51 @@ const Almacen: React.FC = () => {
     setShowExitForm({ partId, itemId });
   };
 
+  // ── Editar / eliminar PIEZA ──────────────────────────────────────────────
+  const saveEditPart = () => {
+    if (!editPart) return;
+    updatePart(editPart.id, { description: editPart.description });
+    logAudit({ module: 'almacen', action: 'update', user: user?.username || '', description: `Editó la pieza "${editPart.description}"` });
+    setEditPart(null);
+  };
+
+  const handleDeletePart = async (partId: string, description: string) => {
+    const ok = await confirm({
+      danger: true,
+      title: 'Eliminar pieza',
+      message: `Se eliminará "${description}" y TODAS sus unidades. Esta acción no se puede deshacer.`,
+    });
+    if (ok) {
+      deletePart(partId);
+      logAudit({ module: 'almacen', action: 'delete', user: user?.username || '', description: `Eliminó la pieza "${description}"` });
+    }
+  };
+
+  // ── Editar / eliminar UNIDAD (item) ──────────────────────────────────────
+  const saveEditItem = () => {
+    if (!editItem) return;
+    updatePartItem(editItem.partId, editItem.itemId, {
+      partNumber: editItem.partNumber,
+      serialNumber: editItem.serialNumber,
+      location: editItem.location,
+      notes: editItem.notes,
+    });
+    logAudit({ module: 'almacen', action: 'update', user: user?.username || '', description: `Editó la unidad S/N ${editItem.serialNumber} (P/N ${editItem.partNumber})`, reference: editItem.serialNumber });
+    setEditItem(null);
+  };
+
+  const handleDeleteItem = async (partId: string, itemId: string, sn: string) => {
+    const ok = await confirm({
+      danger: true,
+      title: 'Eliminar unidad',
+      message: `Se eliminará la unidad S/N "${sn}". Esta acción no se puede deshacer.`,
+    });
+    if (ok) {
+      deletePartItem(partId, itemId);
+      logAudit({ module: 'almacen', action: 'delete', user: user?.username || '', description: `Eliminó la unidad S/N ${sn}`, reference: sn });
+    }
+  };
+
   const getAvailableCount = (part: any) => {
     return part.items.filter((i: any) => i.status === 'available').length;
   };
@@ -265,18 +337,20 @@ const Almacen: React.FC = () => {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h2>Almacén</h2>
+        <h2 className="page-title"><ModuleIcon name="almacen" size={22} /> Almacén</h2>
         <div className="header-actions">
           <input
             type="text"
-            placeholder="🔍 Buscar por descripción, P/N o S/N..."
+            placeholder="Buscar por descripción, P/N o S/N..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="search-input-large"
           />
-          <button onClick={() => setShowForm(!showForm)} className="btn-primary">
-            {showForm ? 'Cancelar' : '+ Nueva Pieza'}
-          </button>
+          {puedeEditar && (
+            <button onClick={() => setShowForm(true)} className="btn-primary">
+              <Icon name="plus" size={15} /> Nueva Pieza
+            </button>
+          )}
         </div>
       </div>
 
@@ -295,9 +369,9 @@ const Almacen: React.FC = () => {
         </button>
       </div>
 
-      {showForm && (
+      {puedeEditar && (
+      <Drawer open={showForm} title="Registrar Nueva Pieza" onClose={() => setShowForm(false)}>
         <form onSubmit={handleSubmit} className="form-card">
-          <h3>Registrar Nueva Pieza</h3>
           <div className="form-grid">
             <input
               type="text"
@@ -348,8 +422,23 @@ const Almacen: React.FC = () => {
               </>
             )}
           </div>
-          <button type="submit" className="btn-primary">Registrar</button>
+          <div className="form-actions">
+            <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
+            <button type="submit" className="btn-primary">Registrar</button>
+          </div>
         </form>
+      </Drawer>
+      )}
+
+      {activeTab === 'inventory' && inventoryParts.length === 0 && (
+        <EmptyState
+          title="No hay piezas registradas"
+          hint="Registra la primera pieza para empezar a controlar el inventario."
+          action={puedeEditar ? { label: 'Registrar la primera pieza', onClick: () => setShowForm(true) } : undefined}
+        />
+      )}
+      {activeTab === 'overhaul' && overhaulParts.length === 0 && (
+        <EmptyState title="No hay piezas en overhaul" hint="Las piezas enviadas a overhaul aparecerán aquí." />
       )}
 
       <div className="parts-list">
@@ -358,16 +447,38 @@ const Almacen: React.FC = () => {
             <div className="part-header-compact" onClick={() => setExpandedPart(expandedPart === part.id ? null : part.id)}>
               <div className="part-info-compact">
                 <h4>{part.description}</h4>
-                <span className="part-meta">{part.type === 'unit' ? '🔧 Unitaria' : '📦 Consumible'} | ✓ {getAvailableCount(part)}/{part.items.length}</span>
+                <span className="part-meta">{part.type === 'unit' ? 'Unitaria' : 'Consumible'} · Disponibles {getAvailableCount(part)}/{part.items.length}</span>
               </div>
-              <button className="expand-btn-compact">
-                {expandedPart === part.id ? '▼' : '▶'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {puedeEditar && (
+                  <button
+                    className="btn-icon sm edit"
+                    onClick={(e) => { e.stopPropagation(); setEditPart({ id: part.id, description: part.description }); }}
+                    title="Editar pieza"
+                    aria-label="Editar pieza"
+                  >
+                    <Icon name="edit" size={15} />
+                  </button>
+                )}
+                {puedeEliminar && (
+                  <button
+                    className="btn-icon sm delete"
+                    onClick={(e) => { e.stopPropagation(); handleDeletePart(part.id, part.description); }}
+                    title="Eliminar pieza"
+                    aria-label="Eliminar pieza"
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                )}
+                <button className="btn-icon sm" aria-label={expandedPart === part.id ? 'Contraer' : 'Expandir'}>
+                  <Icon name={expandedPart === part.id ? 'chevron-left' : 'chevron-right'} size={15} />
+                </button>
+              </div>
             </div>
 
             {expandedPart === part.id && (
               <div className="part-details-compact">
-                {part.type === 'unit' && (
+                {part.type === 'unit' && puedeEditar && (
                   <button 
                     onClick={() => setShowItemForm(showItemForm === part.id ? null : part.id)} 
                     className="btn-primary btn-small-margin"
@@ -419,7 +530,7 @@ const Almacen: React.FC = () => {
                             style={{ display: 'none' }}
                           />
                           <span className="file-upload-btn">
-                            📎 {itemFormData.pdfFile ? itemFormData.pdfFile.name : 'Adjuntar PDF de Trazabilidad (opcional)'}
+                            <Icon name="clip" size={15} /> {itemFormData.pdfFile ? itemFormData.pdfFile.name : 'Adjuntar PDF de Trazabilidad (opcional)'}
                           </span>
                         </label>
                       </div>
@@ -497,27 +608,27 @@ const Almacen: React.FC = () => {
                   <tbody>
                     {part.items.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', padding: '15px', color: '#7f8c8d', fontSize: '13px' }}>
+                        <td colSpan={8} className="table-empty">
                           No hay unidades. Haz clic en "+ Agregar Unidad".
                         </td>
                       </tr>
                     ) : (
                       part.items.map(item => (
                         <tr key={item.id}>
-                          <td><strong>{item.partNumber}</strong></td>
-                          <td>{item.serialNumber}</td>
-                          <td>📍 {item.location}</td>
-                          <td>{new Date(item.entryDate).toLocaleDateString('es-MX')}</td>
-                          <td>
+                          <td data-label="P/N"><strong>{item.partNumber}</strong></td>
+                          <td data-label="S/N">{item.serialNumber}</td>
+                          <td data-label="Ubicación">{item.location}</td>
+                          <td data-label="Fecha">{new Date(item.entryDate).toLocaleDateString('es-MX')}</td>
+                          <td data-label="Estado">
                             <span className={`status status-${item.status}`}>
                               {item.status === 'available' ? 'Disponible' : 
                                item.status === 'reserved' ? 'Reservado' : 'Salida'}
                             </span>
                           </td>
-                          <td>
+                          <td data-label="PDF">
                             {item.pdfUrl ? (
                               <a href={item.pdfUrl} download={item.pdfName} className="pdf-link">
-                                📄
+                                <Icon name="file" size={16} />
                               </a>
                             ) : (
                               <label className="upload-label">
@@ -530,29 +641,49 @@ const Almacen: React.FC = () => {
                                   }}
                                   style={{ display: 'none' }}
                                 />
-                                📎
+                                <Icon name="clip" size={16} />
                               </label>
                             )}
                           </td>
-                          <td>{item.notes || '-'}</td>
-                          <td>
-                            <div className="action-buttons-compact">
-                              <button 
-                                onClick={() => handleExit(part.id, item.id)} 
-                                className="btn-tiny"
+                          <td data-label="Notas">{item.notes || '-'}</td>
+                          <td data-label="Acciones">
+                            <div className="actions-cell">
+                              <button
+                                onClick={() => handleExit(part.id, item.id)}
+                                className="btn-soft btn-soft-delete"
                                 disabled={item.status !== 'available'}
                                 title="Solicitar Salida"
                               >
                                 Salida
                               </button>
-                              <button 
-                                onClick={() => setShowOverhaulForm({ partId: part.id, itemId: item.id })} 
-                                className="btn-tiny btn-overhaul"
+                              <button
+                                onClick={() => setShowOverhaulForm({ partId: part.id, itemId: item.id })}
+                                className="btn-soft btn-soft-warn"
                                 disabled={item.status !== 'available'}
                                 title="Solicitar Overhaul"
                               >
                                 OH
                               </button>
+                              {puedeEditar && (
+                                <button
+                                  onClick={() => setEditItem({ partId: part.id, itemId: item.id, partNumber: item.partNumber, serialNumber: item.serialNumber, location: item.location, notes: item.notes || '' })}
+                                  className="btn-icon sm edit"
+                                  title="Editar unidad"
+                                  aria-label="Editar unidad"
+                                >
+                                  <Icon name="edit" size={15} />
+                                </button>
+                              )}
+                              {puedeEliminar && (
+                                <button
+                                  onClick={() => handleDeleteItem(part.id, item.id, item.serialNumber)}
+                                  className="btn-icon sm delete"
+                                  title="Eliminar unidad"
+                                  aria-label="Eliminar unidad"
+                                >
+                                  <Icon name="trash" size={15} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -570,10 +701,10 @@ const Almacen: React.FC = () => {
             <div className="part-header-compact" onClick={() => setExpandedPart(expandedPart === part.id ? null : part.id)}>
               <div className="part-info-compact">
                 <h4>{part.description}</h4>
-                <span className="part-meta">🔧 En Overhaul: {part.items.length}</span>
+                <span className="part-meta">En Overhaul: {part.items.length}</span>
               </div>
-              <button className="expand-btn-compact">
-                {expandedPart === part.id ? '▼' : '▶'}
+              <button className="btn-icon sm" aria-label={expandedPart === part.id ? 'Contraer' : 'Expandir'}>
+                <Icon name={expandedPart === part.id ? 'chevron-left' : 'chevron-right'} size={15} />
               </button>
             </div>
 
@@ -599,7 +730,7 @@ const Almacen: React.FC = () => {
                       <tr key={item.id}>
                         <td><strong>{item.partNumber}</strong></td>
                         <td>{item.serialNumber}</td>
-                        <td>📍 {item.location}</td>
+                        <td>{item.location}</td>
                         <td>{item.overhaulInfo?.sentDate ? new Date(item.overhaulInfo.sentDate).toLocaleDateString('es-MX') : '-'}</td>
                         <td>{item.overhaulInfo?.repairShop || '-'}</td>
                         <td>{item.overhaulInfo?.aircraftRemoved || '-'}</td>
@@ -608,14 +739,14 @@ const Almacen: React.FC = () => {
                         <td>
                           {item.pdfUrl ? (
                             <a href={item.pdfUrl} download={item.pdfName} className="pdf-link">
-                              📄
+                              <Icon name="file" size={16} />
                             </a>
                           ) : '-'}
                         </td>
                         <td>
-                          <button 
-                            onClick={() => handleReturnFromOverhaul(part.id, item.id)} 
-                            className="btn-tiny btn-return"
+                          <button
+                            onClick={() => handleReturnFromOverhaul(part.id, item.id)}
+                            className="btn-soft btn-soft-ok"
                           >
                             Retornar
                           </button>
@@ -703,6 +834,71 @@ const Almacen: React.FC = () => {
               <button onClick={() => setShowOverhaulForm(null)} className="btn-cancel">
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Editar Pieza ── */}
+      {editPart && (
+        <div className="modal-overlay" onClick={() => setEditPart(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Editar Pieza</h3>
+            <div className="form-grid">
+              <input
+                type="text"
+                placeholder="Descripción"
+                value={editPart.description}
+                onChange={(e) => setEditPart({ ...editPart, description: e.target.value })}
+                style={{ gridColumn: '1 / -1' }}
+                required
+              />
+            </div>
+            <div className="modal-actions">
+              <button onClick={saveEditPart} className="btn-primary">Guardar</button>
+              <button onClick={() => setEditPart(null)} className="btn-cancel">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Editar Unidad ── */}
+      {editItem && (
+        <div className="modal-overlay" onClick={() => setEditItem(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Editar Unidad</h3>
+            <div className="form-grid">
+              <input
+                type="text"
+                placeholder="Número de Parte (P/N)"
+                value={editItem.partNumber}
+                onChange={(e) => setEditItem({ ...editItem, partNumber: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Número de Serie (S/N)"
+                value={editItem.serialNumber}
+                onChange={(e) => setEditItem({ ...editItem, serialNumber: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Ubicación"
+                value={editItem.location}
+                onChange={(e) => setEditItem({ ...editItem, location: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Notas"
+                value={editItem.notes}
+                onChange={(e) => setEditItem({ ...editItem, notes: e.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button onClick={saveEditItem} className="btn-primary">Guardar</button>
+              <button onClick={() => setEditItem(null)} className="btn-cancel">Cancelar</button>
             </div>
           </div>
         </div>

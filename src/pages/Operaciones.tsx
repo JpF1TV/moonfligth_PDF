@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { useOperations } from '../context/OperationsContext';
 import { useAuth } from '../context/AuthContext';
 import { FlightLeg } from '../types';
+import { canEdit, canDelete } from '../utils/permissions';
+import { useAudit } from '../context/AuditContext';
+import { useConfirm } from '../context/ConfirmContext';
+import ModuleIcon from '../components/ModuleIcon';
+import Icon from '../components/Icon';
+import Drawer from '../components/Drawer';
+import EmptyState from '../components/EmptyState';
+import { Pager, usePagination } from '../components/Pager';
 import './Pages.css';
 
 type Tab = 'libro' | 'pilotos' | 'aeronaves' | 'informes';
@@ -70,8 +78,13 @@ const emptyHeader = () => ({
 
 const Operaciones: React.FC = () => {
   const { user } = useAuth();
-  const { pilots, aircraft, flightLogs, nextRegistroNumber, addPilot, updatePilot, deletePilot, addAircraft, addFlightLog } = useOperations();
+  const { pilots, aircraft, flightLogs, nextRegistroNumber, addPilot, updatePilot, deletePilot, addAircraft, updateAircraft, deleteAircraft, addFlightLog, deleteFlightLog } = useOperations();
   const [tab, setTab] = useState<Tab>('libro');
+
+  const { logAudit } = useAudit();
+  const confirm = useConfirm();
+  const puedeEditar = canEdit(user, 'operaciones');
+  const puedeEliminar = canDelete(user, 'operaciones');
 
   // ── Estado del formulario de registro ──────────────────────────────────────
   const [showForm, setShowForm] = useState(false);
@@ -140,6 +153,7 @@ const Operaciones: React.FC = () => {
       };
     });
 
+    logAudit({ module: 'operaciones', action: 'create', user: user?.username || '', description: `Registró vuelo N° ${nextRegistroNumber} (${ac.registration}, ${pilot.name})`, reference: String(nextRegistroNumber) });
     addFlightLog({
       registroNumber: nextRegistroNumber,
       flightNumber: header.flightNumber,
@@ -165,29 +179,98 @@ const Operaciones: React.FC = () => {
 
   // ── Pilotos ─────────────────────────────────────────────────────────────────
   const [showPilotForm, setShowPilotForm] = useState(false);
+  const [editPilotId, setEditPilotId] = useState<string | null>(null);
   const [pilotForm, setPilotForm] = useState({ name: '', licenseNumber: '', email: '', phone: '' });
 
   const submitPilot = (e: React.FormEvent) => {
     e.preventDefault();
-    addPilot({ ...pilotForm, isActive: true, totalBlockHours: 0, totalFlightHours: 0, totalCycles: 0 });
+    if (editPilotId) {
+      updatePilot(editPilotId, {
+        name: pilotForm.name,
+        licenseNumber: pilotForm.licenseNumber,
+        email: pilotForm.email,
+        phone: pilotForm.phone,
+      });
+      logAudit({ module: 'operaciones', action: 'update', user: user?.username || '', description: `Editó el piloto ${pilotForm.name}` });
+    } else {
+      addPilot({ ...pilotForm, isActive: true, totalBlockHours: 0, totalFlightHours: 0, totalCycles: 0 });
+      logAudit({ module: 'operaciones', action: 'create', user: user?.username || '', description: `Agregó el piloto ${pilotForm.name}` });
+    }
     setPilotForm({ name: '', licenseNumber: '', email: '', phone: '' });
+    setEditPilotId(null);
     setShowPilotForm(false);
+  };
+
+  const startEditPilot = (id: string) => {
+    const p = pilots.find(x => x.id === id);
+    if (!p) return;
+    setEditPilotId(id);
+    setPilotForm({ name: p.name, licenseNumber: p.licenseNumber, email: p.email || '', phone: p.phone || '' });
+    setShowPilotForm(true);
+  };
+
+  const handleDeletePilot = async (id: string, name: string) => {
+    const ok = await confirm({ danger: true, title: 'Eliminar piloto', message: `Se eliminará al piloto "${name}". Esta acción no se puede deshacer.` });
+    if (ok) {
+      deletePilot(id);
+      logAudit({ module: 'operaciones', action: 'delete', user: user?.username || '', description: `Eliminó al piloto ${name}` });
+    }
   };
 
   // ── Aeronaves ───────────────────────────────────────────────────────────────
   const [showAcForm, setShowAcForm] = useState(false);
+  const [editAcId, setEditAcId] = useState<string | null>(null);
   const [acForm, setAcForm] = useState({ registration: '', model: '', serialNumber: '', totalHours: '', totalCycles: '' });
 
   const submitAircraft = (e: React.FormEvent) => {
     e.preventDefault();
-    addAircraft({
+    const payload = {
       registration: acForm.registration, model: acForm.model, serialNumber: acForm.serialNumber,
-      isActive: true,
       totalHours: parseFloat(acForm.totalHours) || 0,
       totalCycles: parseInt(acForm.totalCycles) || 0,
-    });
+    };
+    if (editAcId) {
+      updateAircraft(editAcId, payload);
+      logAudit({ module: 'operaciones', action: 'update', user: user?.username || '', description: `Editó la aeronave ${payload.registration}`, reference: payload.registration });
+    } else {
+      addAircraft({ ...payload, isActive: true });
+      logAudit({ module: 'operaciones', action: 'create', user: user?.username || '', description: `Agregó la aeronave ${payload.registration}`, reference: payload.registration });
+    }
     setAcForm({ registration: '', model: '', serialNumber: '', totalHours: '', totalCycles: '' });
+    setEditAcId(null);
     setShowAcForm(false);
+  };
+
+  const startEditAircraft = (id: string) => {
+    const a = aircraft.find(x => x.id === id);
+    if (!a) return;
+    setEditAcId(id);
+    setAcForm({
+      registration: a.registration, model: a.model, serialNumber: a.serialNumber,
+      totalHours: String(a.totalHours), totalCycles: String(a.totalCycles),
+    });
+    setShowAcForm(true);
+  };
+
+  const handleDeleteAircraft = async (id: string, reg: string) => {
+    const ok = await confirm({ danger: true, title: 'Eliminar aeronave', message: `Se eliminará la aeronave "${reg}". Esta acción no se puede deshacer.` });
+    if (ok) {
+      deleteAircraft(id);
+      logAudit({ module: 'operaciones', action: 'delete', user: user?.username || '', description: `Eliminó la aeronave ${reg}`, reference: reg });
+    }
+  };
+
+  // ── Vuelos ──────────────────────────────────────────────────────────────────
+  const handleDeleteFlight = async (id: string, regNum: number) => {
+    const ok = await confirm({
+      danger: true,
+      title: 'Eliminar registro de vuelo',
+      message: `Se eliminará el registro de vuelo N° ${regNum}. Las horas ya acumuladas en el piloto y la aeronave no se revierten automáticamente.`,
+    });
+    if (ok) {
+      deleteFlightLog(id);
+      logAudit({ module: 'operaciones', action: 'delete', user: user?.username || '', description: `Eliminó el registro de vuelo N° ${regNum}`, reference: String(regNum) });
+    }
   };
 
   // ── Informes ────────────────────────────────────────────────────────────────
@@ -195,18 +278,23 @@ const Operaciones: React.FC = () => {
 
   const filteredLogs = flightLogs.filter(l => !filterPilot || l.pilotId === filterPilot);
 
+  // ── Paginación ──────────────────────────────────────────────────────────────
+  const pilotsPg = usePagination(pilots, 10);
+  const aircraftPg = usePagination(aircraft, 10);
+  const logsPg = usePagination(filteredLogs, 10);
+
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="page-container">
       <div className="page-header">
-        <h2>✈️ Operaciones</h2>
+        <h2 className="page-title"><ModuleIcon name="operaciones" size={22} /> Operaciones</h2>
       </div>
 
       <div className="tabs">
         {(['libro', 'pilotos', 'aeronaves', 'informes'] as Tab[]).map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-            {t === 'libro' ? '📋 Libro de Vuelo' : t === 'pilotos' ? '👨‍✈️ Pilotos' : t === 'aeronaves' ? '🛩️ Aeronaves' : '📊 Informes'}
+            {t === 'libro' ? 'Libro de Vuelo' : t === 'pilotos' ? 'Pilotos' : t === 'aeronaves' ? 'Aeronaves' : 'Informes'}
           </button>
         ))}
       </div>
@@ -217,23 +305,21 @@ const Operaciones: React.FC = () => {
       {tab === 'libro' && (
         <div>
           <div className="header-actions" style={{ marginBottom: 20 }}>
-            <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-              {showForm ? 'Cancelar' : '+ Registrar Vuelo'}
+            <button className="btn-primary" onClick={() => setShowForm(true)}>
+              <Icon name="plus" size={15} /> Registrar Vuelo
             </button>
           </div>
 
-          {showForm && (
+          <Drawer
+            open={showForm}
+            wide
+            title={`Nuevo Registro de Vuelo · N° ${nextRegistroNumber}`}
+            onClose={resetForm}
+          >
             <form className="form-card" onSubmit={submitFlight} style={{ maxWidth: '100%' }}>
-              <h3 style={{ marginBottom: 16, color: '#2c3e50' }}>
-                Nuevo Registro de Vuelo &nbsp;
-                <span style={{ fontSize: 14, color: '#7f8c8d', fontWeight: 400 }}>
-                  Registro N° {nextRegistroNumber}
-                </span>
-              </h3>
-
               {/* ── Encabezado ── */}
-              <div style={{ background: '#f8f9fa', borderRadius: 8, padding: 16, marginBottom: 20, border: '1px solid #e9ecef' }}>
-                <h4 style={{ margin: '0 0 12px', color: '#495057', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1 }}>Datos del Vuelo</h4>
+              <div className="flight-block">
+                <h4 className="flight-block-title">Datos del Vuelo</h4>
                 <div className="form-grid">
                   <div>
                     <label style={labelStyle}>N° Vuelo (libro físico)</label>
@@ -277,7 +363,7 @@ const Operaciones: React.FC = () => {
 
                 {/* Copiloto toggle */}
                 <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#495057' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-soft)' }}>
                     <input
                       type="checkbox"
                       checked={header.hasCoPilot}
@@ -309,7 +395,7 @@ const Operaciones: React.FC = () => {
               {/* ── Trayectos ── */}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <h4 style={{ margin: 0, color: '#495057', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  <h4 style={{ margin: 0, color: 'var(--text-soft)', fontSize: 13, textTransform: 'uppercase', letterSpacing: 1 }}>
                     Trayectos del día
                   </h4>
                   <button type="button" className="btn-primary" style={{ fontSize: 12, padding: '6px 14px' }} onClick={addLeg}>
@@ -323,9 +409,9 @@ const Operaciones: React.FC = () => {
                     <div key={idx} style={legCardStyle}>
                       {/* Encabezado del trayecto */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <span style={{ fontWeight: 700, color: '#2c3e50', fontSize: 14 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-strong)', fontSize: 14 }}>
                           Trayecto {idx + 1} &nbsp;
-                          <span style={{ fontWeight: 400, color: '#7f8c8d', fontSize: 12 }}>
+                          <span style={{ fontWeight: 400, color: 'var(--text-faint)', fontSize: 12 }}>
                             Ciclo {idx + 1} · RIN {idx + 1}
                           </span>
                         </span>
@@ -394,18 +480,18 @@ const Operaciones: React.FC = () => {
                         </div>
                         <div>
                           <label style={labelStyle}>Combustible gastado</label>
-                          <div style={{ ...inputStyle, background: '#f1f3f5', color: '#495057', display: 'flex', alignItems: 'center' }}>
+                          <div style={inputStyle} className="field-readonly">
                             {burned > 0 ? `${burned.toFixed(1)} gal` : '—'}
                           </div>
                         </div>
                       </div>
 
                       {/* Resumen del trayecto */}
-                      <div style={{ display: 'flex', gap: 16, marginTop: 8, padding: '8px 12px', background: '#e8f4fd', borderRadius: 6, fontSize: 13 }}>
-                        <span>⏱ Vuelo: <strong>{flightMins > 0 ? minToHHMM(flightMins) : '—'}</strong></span>
-                        <span>🕐 Bloque: <strong>{blockMins > 0 ? minToHHMM(blockMins) : '—'}</strong></span>
-                        <span>🔄 Ciclo: <strong>{idx + 1}</strong></span>
-                        <span>📍 RIN: <strong>{idx + 1}</strong></span>
+                      <div className="flight-summary">
+                        <span>Vuelo: <strong>{flightMins > 0 ? minToHHMM(flightMins) : '—'}</strong></span>
+                        <span>Bloque: <strong>{blockMins > 0 ? minToHHMM(blockMins) : '—'}</strong></span>
+                        <span>Ciclo: <strong>{idx + 1}</strong></span>
+                        <span>RIN: <strong>{idx + 1}</strong></span>
                       </div>
                     </div>
                   );
@@ -414,7 +500,7 @@ const Operaciones: React.FC = () => {
 
 
               {/* ── Totales del registro ── */}
-              <div style={{ background: '#2c3e50', color: '#fff', borderRadius: 8, padding: '14px 20px', marginBottom: 16, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+              <div className="flight-totals">
                 <div>
                   <div style={{ fontSize: 11, opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1 }}>Tiempo de Vuelo Total</div>
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{totalFlightMins > 0 ? minToHHMM(totalFlightMins) : '—'}</div>
@@ -441,27 +527,29 @@ const Operaciones: React.FC = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}>
-                  Cancelar
-                </button>
+                <button type="button" className="btn-secondary" onClick={resetForm}>Cancelar</button>
                 <button type="submit" className="btn-primary">Guardar Registro</button>
               </div>
             </form>
-          )}
+          </Drawer>
 
           {/* ── Tabla de registros ── */}
           {flightLogs.length === 0 ? (
-            <div className="empty-state">No hay vuelos registrados aún.</div>
+            <EmptyState
+              title="No hay vuelos registrados aún"
+              hint="Registra el primer vuelo para empezar a acumular horas y ciclos."
+              action={{ label: 'Registrar el primer vuelo', onClick: () => setShowForm(true) }}
+            />
           ) : (
             <div>
               {flightLogs.map(log => (
-                <div key={log.id} style={{ background: '#fff', border: '1px solid #e9ecef', borderRadius: 10, marginBottom: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                <div key={log.id} className="flight-card">
                   {/* Encabezado del registro */}
-                  <div style={{ background: '#2c3e50', color: '#fff', padding: '10px 16px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="flight-card-head">
                     <span style={{ fontWeight: 700, fontSize: 15 }}>Reg. N° {log.registroNumber}</span>
-                    <span>✈ Vuelo: <strong>{log.flightNumber}</strong></span>
-                    <span>🛩 {log.aircraftRegistration}</span>
-                    <span>👨‍✈️ {log.pilotName}{log.hasCoPilot && log.coPilotName ? ` / ${log.coPilotName}` : ''}</span>
+                    <span>Vuelo: <strong>{log.flightNumber}</strong></span>
+                    <span>{log.aircraftRegistration}</span>
+                    <span>{log.pilotName}{log.hasCoPilot && log.coPilotName ? ` / ${log.coPilotName}` : ''}</span>
                     <span style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8 }}>
                       {new Date(log.createdDate).toLocaleDateString('es-CO')}
                     </span>
@@ -471,7 +559,7 @@ const Operaciones: React.FC = () => {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
-                        <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+                        <tr>
                           <th style={thStyle}>Tray.</th>
                           <th style={thStyle}>Origen</th>
                           <th style={thStyle}>Destino</th>
@@ -490,7 +578,7 @@ const Operaciones: React.FC = () => {
                       </thead>
                       <tbody>
                         {log.legs.map(leg => (
-                          <tr key={leg.id} style={{ borderBottom: '1px solid #f1f3f5' }}>
+                          <tr key={leg.id}>
                             <td style={tdStyle}>{leg.legNumber}</td>
                             <td style={{ ...tdStyle, fontWeight: 600 }}>{leg.origin}</td>
                             <td style={{ ...tdStyle, fontWeight: 600 }}>{leg.destination}</td>
@@ -502,7 +590,7 @@ const Operaciones: React.FC = () => {
                             <td style={tdStyle}>{minToHHMM(leg.blockMinutes)}</td>
                             <td style={tdStyle}>{leg.fuelInitial > 0 ? `${leg.fuelInitial.toFixed(1)}` : '—'}</td>
                             <td style={tdStyle}>{leg.fuelFinal > 0 ? `${leg.fuelFinal.toFixed(1)}` : '—'}</td>
-                            <td style={{ ...tdStyle, color: leg.fuelBurned > 0 ? '#e74c3c' : '#aaa' }}>
+                            <td style={{ ...tdStyle, color: leg.fuelBurned > 0 ? 'var(--danger)' : 'var(--text-faint)' }}>
                               {leg.fuelBurned > 0 ? `${leg.fuelBurned.toFixed(1)}` : '—'}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>{leg.cycle}</td>
@@ -514,12 +602,12 @@ const Operaciones: React.FC = () => {
                   </div>
 
                   {/* Totales del registro */}
-                  <div style={{ padding: '10px 16px', background: '#f8f9fa', borderTop: '1px solid #dee2e6', display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
-                    <span>⏱ <strong>T. Vuelo:</strong> {minToHHMM(log.totalFlightMinutes)}</span>
-                    <span>🕐 <strong>T. Bloque:</strong> {minToHHMM(log.totalBlockMinutes)}</span>
-                    <span>👤 <strong>T. Cliente:</strong> {minToHHMM(log.clientMinutes)}</span>
-                    <span>🔄 <strong>Ciclos:</strong> {log.totalCycles}</span>
-                    {log.notes && <span style={{ color: '#7f8c8d' }}>📝 {log.notes}</span>}
+                  <div className="flight-card-foot">
+                    <span><strong>T. Vuelo:</strong> {minToHHMM(log.totalFlightMinutes)}</span>
+                    <span><strong>T. Bloque:</strong> {minToHHMM(log.totalBlockMinutes)}</span>
+                    <span><strong>T. Cliente:</strong> {minToHHMM(log.clientMinutes)}</span>
+                    <span><strong>Ciclos:</strong> {log.totalCycles}</span>
+                    {log.notes && <span style={{ color: 'var(--text-faint)' }}>Nota: {log.notes}</span>}
                   </div>
                 </div>
               ))}
@@ -535,13 +623,23 @@ const Operaciones: React.FC = () => {
       {tab === 'pilotos' && (
         <div>
           <div className="header-actions" style={{ marginBottom: 20 }}>
-            <button className="btn-primary" onClick={() => setShowPilotForm(!showPilotForm)}>
-              {showPilotForm ? 'Cancelar' : '+ Agregar Piloto'}
-            </button>
+            {puedeEditar && (
+              <button className="btn-primary" onClick={() => {
+                setPilotForm({ name: '', licenseNumber: '', email: '', phone: '' });
+                setEditPilotId(null);
+                setShowPilotForm(true);
+              }}>
+                <Icon name="plus" size={15} /> Agregar Piloto
+              </button>
+            )}
           </div>
-          {showPilotForm && (
+          {puedeEditar && (
+          <Drawer
+            open={showPilotForm}
+            title={editPilotId ? 'Editar Piloto' : 'Nuevo Piloto'}
+            onClose={() => { setPilotForm({ name: '', licenseNumber: '', email: '', phone: '' }); setEditPilotId(null); setShowPilotForm(false); }}
+          >
             <form className="form-card" onSubmit={submitPilot}>
-              <h3>Nuevo Piloto</h3>
               <div className="form-grid">
                 <input placeholder="Nombre completo" value={pilotForm.name} onChange={e => setPilotForm(p => ({ ...p, name: e.target.value }))} required />
                 <input placeholder="N° Licencia" value={pilotForm.licenseNumber} onChange={e => setPilotForm(p => ({ ...p, licenseNumber: e.target.value }))} required />
@@ -552,7 +650,16 @@ const Operaciones: React.FC = () => {
                 <button type="submit" className="btn-primary">Guardar</button>
               </div>
             </form>
+          </Drawer>
           )}
+          {pilots.length === 0 ? (
+            <EmptyState
+              title="No hay pilotos registrados"
+              hint="Agrega pilotos para poder asignarlos a los registros de vuelo."
+              action={puedeEditar ? { label: 'Agregar el primer piloto', onClick: () => setShowPilotForm(true) } : undefined}
+            />
+          ) : (
+          <>
           <div className="table-container">
             <table>
               <thead>
@@ -561,20 +668,32 @@ const Operaciones: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {pilots.map(p => (
+                {pilotsPg.pageItems.map(p => (
                   <tr key={p.id}>
-                    <td>{p.name}</td>
-                    <td>{p.licenseNumber}</td>
-                    <td>{p.totalBlockHours.toFixed(1)} h</td>
-                    <td>{p.totalFlightHours.toFixed(1)} h</td>
-                    <td>{p.totalCycles}</td>
-                    <td><span className={`status ${p.isActive ? 'status-approved' : 'status-rejected'}`}>{p.isActive ? 'Activo' : 'Inactivo'}</span></td>
-                    <td>
-                      <div className="action-buttons">
-                        <button className="btn-small" style={{ background: '#f39c12' }} onClick={() => updatePilot(p.id, { isActive: !p.isActive })}>
-                          {p.isActive ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button className="btn-small" onClick={() => deletePilot(p.id)}>Eliminar</button>
+                    <td data-label="Nombre"><strong>{p.name}</strong></td>
+                    <td data-label="Licencia">{p.licenseNumber}</td>
+                    <td data-label="Horas bloque">{p.totalBlockHours.toFixed(1)} h</td>
+                    <td data-label="Horas vuelo">{p.totalFlightHours.toFixed(1)} h</td>
+                    <td data-label="Ciclos">{p.totalCycles}</td>
+                    <td data-label="Estado"><span className={`status ${p.isActive ? 'status-approved' : 'status-rejected'}`}>{p.isActive ? 'Activo' : 'Inactivo'}</span></td>
+                    <td data-label="Acciones">
+                      <div className="actions-cell">
+                        {puedeEditar && (
+                          <button className="btn-soft btn-soft-warn" onClick={() => updatePilot(p.id, { isActive: !p.isActive })}>
+                            {p.isActive ? 'Desactivar' : 'Activar'}
+                          </button>
+                        )}
+                        {puedeEditar && (
+                          <button className="btn-icon sm edit" onClick={() => startEditPilot(p.id)} title="Editar" aria-label="Editar">
+                            <Icon name="edit" size={15} />
+                          </button>
+                        )}
+                        {puedeEliminar && (
+                          <button className="btn-icon sm delete" onClick={() => handleDeletePilot(p.id, p.name)} title="Eliminar" aria-label="Eliminar">
+                            <Icon name="trash" size={15} />
+                          </button>
+                        )}
+                        {!puedeEditar && !puedeEliminar && <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>—</span>}
                       </div>
                     </td>
                   </tr>
@@ -582,6 +701,9 @@ const Operaciones: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <Pager page={pilotsPg.page} totalPages={pilotsPg.totalPages} total={pilotsPg.total} pageSize={pilotsPg.pageSize} onChange={pilotsPg.setPage} />
+          </>
+          )}
         </div>
       )}
 
@@ -591,13 +713,23 @@ const Operaciones: React.FC = () => {
       {tab === 'aeronaves' && (
         <div>
           <div className="header-actions" style={{ marginBottom: 20 }}>
-            <button className="btn-primary" onClick={() => setShowAcForm(!showAcForm)}>
-              {showAcForm ? 'Cancelar' : '+ Agregar Aeronave'}
-            </button>
+            {puedeEditar && (
+              <button className="btn-primary" onClick={() => {
+                setAcForm({ registration: '', model: '', serialNumber: '', totalHours: '', totalCycles: '' });
+                setEditAcId(null);
+                setShowAcForm(true);
+              }}>
+                <Icon name="plus" size={15} /> Agregar Aeronave
+              </button>
+            )}
           </div>
-          {showAcForm && (
+          {puedeEditar && (
+          <Drawer
+            open={showAcForm}
+            title={editAcId ? 'Editar Aeronave' : 'Nueva Aeronave'}
+            onClose={() => { setAcForm({ registration: '', model: '', serialNumber: '', totalHours: '', totalCycles: '' }); setEditAcId(null); setShowAcForm(false); }}
+          >
             <form className="form-card" onSubmit={submitAircraft}>
-              <h3>Nueva Aeronave</h3>
               <div className="form-grid">
                 <input placeholder="Matrícula (ej: HK-1234)" value={acForm.registration} onChange={e => setAcForm(p => ({ ...p, registration: e.target.value }))} required />
                 <input placeholder="Modelo" value={acForm.model} onChange={e => setAcForm(p => ({ ...p, model: e.target.value }))} required />
@@ -609,26 +741,58 @@ const Operaciones: React.FC = () => {
                 <button type="submit" className="btn-primary">Guardar</button>
               </div>
             </form>
+          </Drawer>
           )}
+          {aircraft.length === 0 ? (
+            <EmptyState
+              title="No hay aeronaves registradas"
+              hint="Agrega una aeronave para poder registrar vuelos y componentes."
+              action={puedeEditar ? { label: 'Agregar la primera aeronave', onClick: () => setShowAcForm(true) } : undefined}
+            />
+          ) : (
+          <>
           <div className="table-container">
             <table>
               <thead>
-                <tr><th>Matrícula</th><th>Modelo</th><th>N° Serie</th><th>Horas Totales</th><th>Ciclos Totales</th><th>Estado</th></tr>
+                <tr><th>Matrícula</th><th>Modelo</th><th>N° Serie</th><th>Horas Totales</th><th>Ciclos Totales</th><th>Estado</th><th>Acciones</th></tr>
               </thead>
               <tbody>
-                {aircraft.map(a => (
+                {aircraftPg.pageItems.map(a => (
                   <tr key={a.id}>
-                    <td><strong>{a.registration}</strong></td>
-                    <td>{a.model}</td>
-                    <td>{a.serialNumber}</td>
-                    <td>{a.totalHours.toFixed(1)} h</td>
-                    <td>{a.totalCycles}</td>
-                    <td><span className={`status ${a.isActive ? 'status-approved' : 'status-rejected'}`}>{a.isActive ? 'Activa' : 'Inactiva'}</span></td>
+                    <td data-label="Matrícula"><strong>{a.registration}</strong></td>
+                    <td data-label="Modelo">{a.model}</td>
+                    <td data-label="N° serie">{a.serialNumber}</td>
+                    <td data-label="Horas totales">{a.totalHours.toFixed(1)} h</td>
+                    <td data-label="Ciclos totales">{a.totalCycles}</td>
+                    <td data-label="Estado"><span className={`status ${a.isActive ? 'status-approved' : 'status-rejected'}`}>{a.isActive ? 'Activa' : 'Inactiva'}</span></td>
+                    <td data-label="Acciones">
+                      <div className="actions-cell">
+                        {puedeEditar && (
+                          <button className="btn-soft btn-soft-warn" onClick={() => updateAircraft(a.id, { isActive: !a.isActive })}>
+                            {a.isActive ? 'Desactivar' : 'Activar'}
+                          </button>
+                        )}
+                        {puedeEditar && (
+                          <button className="btn-icon sm edit" onClick={() => startEditAircraft(a.id)} title="Editar" aria-label="Editar">
+                            <Icon name="edit" size={15} />
+                          </button>
+                        )}
+                        {puedeEliminar && (
+                          <button className="btn-icon sm delete" onClick={() => handleDeleteAircraft(a.id, a.registration)} title="Eliminar" aria-label="Eliminar">
+                            <Icon name="trash" size={15} />
+                          </button>
+                        )}
+                        {!puedeEditar && !puedeEliminar && <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>—</span>}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Pager page={aircraftPg.page} totalPages={aircraftPg.totalPages} total={aircraftPg.total} pageSize={aircraftPg.pageSize} onChange={aircraftPg.setPage} />
+          </>
+          )}
         </div>
       )}
 
@@ -638,13 +802,13 @@ const Operaciones: React.FC = () => {
       {tab === 'informes' && (
         <div>
           <div style={{ marginBottom: 20 }}>
-            <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 14 }}>
+            <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)} style={{ ...inputStyle, width: 'auto', minWidth: 220 }}>
               <option value="">Todos los pilotos</option>
               {pilots.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
 
-          <h3 style={{ marginBottom: 16, color: '#2c3e50' }}>Resumen por Piloto</h3>
+          <h3 style={{ marginBottom: 16, color: 'var(--text-strong)' }}>Resumen por Piloto</h3>
           <div className="table-container" style={{ marginBottom: 30 }}>
             <table>
               <thead>
@@ -665,36 +829,47 @@ const Operaciones: React.FC = () => {
             </table>
           </div>
 
-          <h3 style={{ marginBottom: 16, color: '#2c3e50' }}>Registros de Vuelo</h3>
+          <h3 style={{ marginBottom: 16, color: 'var(--text-strong)' }}>Registros de Vuelo</h3>
           {filteredLogs.length === 0 ? (
-            <div className="empty-state">No hay registros con los filtros seleccionados.</div>
+            <EmptyState title="No hay registros con los filtros seleccionados" hint="Cambia el piloto del filtro o registra un vuelo nuevo." />
           ) : (
+            <>
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
                     <th>Reg. N°</th><th>N° Vuelo</th><th>Aeronave</th><th>Piloto</th>
                     <th>Trayectos</th><th>T. Vuelo</th><th>T. Bloque</th><th>T. Cliente</th><th>Ciclos</th><th>Fecha</th>
+                    {puedeEliminar && <th>Acciones</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLogs.map(l => (
+                  {logsPg.pageItems.map(l => (
                     <tr key={l.id}>
-                      <td><strong>{l.registroNumber}</strong></td>
-                      <td>{l.flightNumber}</td>
-                      <td>{l.aircraftRegistration}</td>
-                      <td>{l.pilotName}</td>
-                      <td style={{ textAlign: 'center' }}>{l.legs.length}</td>
-                      <td>{minToHHMM(l.totalFlightMinutes)}</td>
-                      <td>{minToHHMM(l.totalBlockMinutes)}</td>
-                      <td><strong>{minToHHMM(l.clientMinutes)}</strong></td>
-                      <td style={{ textAlign: 'center' }}>{l.totalCycles}</td>
-                      <td>{new Date(l.createdDate).toLocaleDateString('es-CO')}</td>
+                      <td data-label="Reg. N°"><strong>{l.registroNumber}</strong></td>
+                      <td data-label="N° vuelo">{l.flightNumber}</td>
+                      <td data-label="Aeronave">{l.aircraftRegistration}</td>
+                      <td data-label="Piloto">{l.pilotName}</td>
+                      <td data-label="Trayectos" style={{ textAlign: 'center' }}>{l.legs.length}</td>
+                      <td data-label="T. vuelo">{minToHHMM(l.totalFlightMinutes)}</td>
+                      <td data-label="T. bloque">{minToHHMM(l.totalBlockMinutes)}</td>
+                      <td data-label="T. cliente"><strong>{minToHHMM(l.clientMinutes)}</strong></td>
+                      <td data-label="Ciclos" style={{ textAlign: 'center' }}>{l.totalCycles}</td>
+                      <td data-label="Fecha">{new Date(l.createdDate).toLocaleDateString('es-CO')}</td>
+                      {puedeEliminar && (
+                        <td data-label="Acciones">
+                          <button className="btn-icon sm delete" onClick={() => handleDeleteFlight(l.id, l.registroNumber)} title="Eliminar" aria-label="Eliminar">
+                            <Icon name="trash" size={15} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            <Pager page={logsPg.page} totalPages={logsPg.totalPages} total={logsPg.total} pageSize={logsPg.pageSize} onChange={logsPg.setPage} />
+            </>
           )}
         </div>
       )}
@@ -708,7 +883,7 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
   fontSize: 12,
   fontWeight: 600,
-  color: '#6c757d',
+  color: 'var(--text-soft)',
   marginBottom: 4,
   textTransform: 'uppercase',
   letterSpacing: 0.5,
@@ -717,26 +892,27 @@ const labelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
-  border: '1px solid #ced4da',
+  border: '1px solid var(--border-strong)',
   borderRadius: 6,
   fontSize: 14,
   boxSizing: 'border-box',
-  background: '#fff',
+  background: 'var(--bg-input)',
+  color: 'var(--text-main)',
 };
 
 const legCardStyle: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #dee2e6',
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--border)',
   borderRadius: 8,
   padding: 16,
   marginBottom: 12,
-  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+  boxShadow: 'var(--shadow-sm)',
 };
 
 const removeBtnStyle: React.CSSProperties = {
   background: 'none',
-  border: '1px solid #e74c3c',
-  color: '#e74c3c',
+  border: '1px solid var(--danger)',
+  color: 'var(--danger)',
   borderRadius: 4,
   padding: '3px 10px',
   fontSize: 12,
@@ -748,14 +924,14 @@ const thStyle: React.CSSProperties = {
   textAlign: 'left',
   fontSize: 12,
   fontWeight: 600,
-  color: '#495057',
+  color: 'var(--text-soft)',
   whiteSpace: 'nowrap',
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '7px 10px',
   fontSize: 13,
-  color: '#2c3e50',
+  color: 'var(--text-main)',
   whiteSpace: 'nowrap',
 };
 

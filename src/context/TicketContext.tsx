@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Ticket } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface TicketContextType {
   tickets: Ticket[];
@@ -11,7 +12,7 @@ interface TicketContextType {
 const TicketContext = createContext<TicketContextType | undefined>(undefined);
 
 export const TicketProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = usePersistedState<Ticket[]>('tickets', []);
 
   const generateTicketNumber = () => {
     const date = new Date();

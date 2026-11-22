@@ -1,11 +1,13 @@
 import React from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import './Pages.css';
 
 const Administrativo: React.FC = () => {
   const { requests, updateRequest, parts, updatePartItem, addHistory } = useData();
   const { user } = useAuth();
+  const toast = useToast();
 
   const handleApprove = (requestId: string) => {
     const request = requests.find(r => r.id === requestId);
@@ -14,7 +16,7 @@ const Administrativo: React.FC = () => {
     // Buscar la pieza que contiene el item con ese partNumber
     const part = parts.find(p => p.items.some(i => i.partNumber === request.partNumber));
     if (!part) {
-      alert('No se encontró la pieza solicitada');
+      toast.error('No se encontró la pieza solicitada');
       return;
     }
 
@@ -24,7 +26,7 @@ const Administrativo: React.FC = () => {
     );
     
     if (availableItems.length < request.quantity) {
-      alert(`No hay suficientes piezas disponibles. Disponibles: ${availableItems.length}, Solicitadas: ${request.quantity}`);
+      toast.error(`No hay suficientes piezas disponibles. Disponibles: ${availableItems.length}, Solicitadas: ${request.quantity}`);
       return;
     }
 
@@ -74,7 +76,7 @@ const Administrativo: React.FC = () => {
       approvalDate: new Date().toISOString()
     });
 
-    alert('Solicitud aprobada exitosamente');
+    toast.success('Solicitud aprobada exitosamente');
   };
 
   const handleReject = (requestId: string) => {
@@ -83,7 +85,7 @@ const Administrativo: React.FC = () => {
       approvedBy: user?.username,
       approvalDate: new Date().toISOString()
     });
-    alert('Solicitud rechazada');
+    toast.info('Solicitud rechazada');
   };
 
   const getAvailableCount = (partNumber: string) => {

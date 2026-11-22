@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { AircraftComponent } from '../types';
+import { usePersistedState } from '../utils/usePersistedState';
 
 interface EngineeringContextType {
   components: AircraftComponent[];
@@ -46,7 +47,7 @@ const sampleComponents: AircraftComponent[] = [
 ];
 
 export const EngineeringProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [components, setComponents] = useState<AircraftComponent[]>(sampleComponents);
+  const [components, setComponents] = usePersistedState<AircraftComponent[]>('components', sampleComponents);
 
   const addComponent = (c: Omit<AircraftComponent, 'id' | 'status'>) => {
     const status = calcStatus(c, c.installHours, c.installCycles);
